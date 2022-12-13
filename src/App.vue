@@ -1,101 +1,164 @@
 
 <template>
-    <div>
-      <h1>Jf Boadrd</h1>
-testf
-        <!-- Login popup -->
-        <div id="loginPopup" v-if="showLoginPopup">
-        <h3>Login</h3>
-        <form @submit.prevent>
-          <input type="text" placeholder="Username" v-model="username" />
-          <input type="password" placeholder="Password" v-model="password" />
-          <button @click="login">Login</button>
-          <button @click="toggleLoginPopup">Cancel</button>
-        </form>
-      </div>
+	<div>
+		<h1>Job Board</h1>
 
-      <button @click="toggleLoginPopup">Login</button>
-  
-      <ul>
-        <li v-for="(job, index) in jobs" :key="index">
-          <h3>{{ job.title }}</h3>
-          <p>{{ job.description }}</p>
-        </li>
-      </ul>
-      
-    </div>
+		<div v-if="user">
+			<p>Logged in as {{ user.name }}</p>
+			<p>Your e-mail is: {{ user.email }}</p>
+			<p>Your roles are: {{ user.translated_roles.join(', ') }}</p>
+			<button @click="logout">Log out</button>
+		</div>
+
+		<!-- Login popup -->
+		<div id="loginPopup" v-if="showLoginPopup">
+			<h3>Login</h3>
+			<form @submit.prevent>
+				<input type="text" placeholder="Username" v-model="username" />
+				<input type="password" placeholder="Password" v-model="password" />
+				<button @click="login">Login</button>
+				<button @click="toggleLoginPopup">Cancel</button>
+			</form>
+		</div>
+
+		<button v-if="!user && !showLoginPopup" @click="toggleLoginPopup">Login</button>
+
+		<ul>
+			<li v-for="(job, index) in jobs" :key="index">
+				<h3>{{ job.title }}</h3>
+				<p>{{ job.description }}</p>
+			</li>
+		</ul>
+
+		<!-- Add Job Offer Form -->
+		<AddJobForm v-if="user && user.roles.includes('firm')" />
+
+	</div>
 </template>
   
 <script>
 import axios from 'axios';
+import AddJobForm from '@/components/AddJobForm';
 
 export default {
-  data() {
-    return {
-      jobs: [],
-      page: 1,
-      isLoading: false,
-      showLoginPopup: false,
-      username: '',
-      password: '',
-    }
-  },
-  mounted() {
-    this.fetchJobs();
-    window.addEventListener('scroll', this.handleScroll);
-  },
-  beforeUnmount() {
-    window.removeEventListener('scroll', this.handleScroll);
-  },
-  methods: {
-    fetchJobs() {
-      // Only fetch jobs if we're not already loading
-      if (this.isLoading) {
-        return;
-      }
-      this.isLoading = true;
+	components: {
+		AddJobForm
+	},
+	data() {
+		return {
+			jobs: [],
+			page: 1,
+			isLoading: false,
+			showLoginPopup: false,
+			username: '',
+			password: '',
+			user: null,
+			localStorage: localStorage
+		}
+	},
+	mounted() {
+		if (localStorage.getItem('token')) {
+			this.fetchUserData();
+		} else {
+			this.fetchJobs(true);
+		}
+	},
+	beforeUnmount() {
+		if (typeof this.handleScroll === 'function') {
+			window.removeEventListener('scroll', this.handleScroll);
+		}
+	},
+	methods: {
+		fetchJobs(forcePageOne = false) {
+			if (this.isLoading) {  // Only fetch jobs if we're not already loading
+				return;
+			}
+			this.isLoading = true;
 
-      axios
-        .get('http://localhost:80/api/jobs?page=' + this.page)
-        .then(response => {
-          this.jobs = [...this.jobs, ...response.data.data];
-          this.page++;
-          this.isLoading = false;
-        })
-        .catch(error => {
-          console.log(error);
-          this.isLoading = false;
-        });
-    },
-    handleScroll() {
-      const bottom =
-        document.documentElement.scrollHeight -
-        (window.innerHeight + window.scrollY);
-      if (bottom <= 250) {
-        this.fetchJobs();
-      }
-    },
-    toggleLoginPopup() {
-      this.showLoginPopup = !this.showLoginPopup;
-    },
-    login() {
-        axios
-        .post('http://localhost:80/api/sanctum/token', {
-            email: this.username,
-            password: this.password,
-            device_name: 'webapp_device'
-        })
-        .then(response => {
-            // Login was successful, save the token to use for future requests
-            localStorage.setItem('token', response.data.token);
-            this.showLoginPopup = false;
-        })
-        .catch(error => {
-            // Login failed, display an error message to the user
-            alert('Login failed, please try again');
-            console.error(error)
-        });
-  }
-  }
+			if (forcePageOne) {
+				this.page = 1;
+				this.jobs = [];
+				window.addEventListener('scroll', this.handleScroll);
+			}
+
+			let url = 'http://localhost:80/api/jobs?page=' + this.page;
+			if (this.user && this.user.roles.includes('firm')) {
+				url = 'http://localhost:80/api/firm/jobs?page=' + this.page;
+			}
+
+			axios.get(url)
+				.then(response => {
+					this.jobs = [...this.jobs, ...response.data.data];
+					this.page++;
+					this.isLoading = false;
+				})
+				.catch(error => {
+					console.log(error);
+					this.isLoading = false;
+				});
+		},
+		handleScroll() {
+			const bottom =
+				document.documentElement.scrollHeight -
+				(window.innerHeight + window.scrollY);
+			if (bottom <= 250) {
+				this.fetchJobs();
+			}
+		},
+		toggleLoginPopup() {
+			this.showLoginPopup = !this.showLoginPopup;
+		},
+		login() {
+			axios.post('http://localhost:80/api/sanctum/token', {
+				email: this.username,
+				password: this.password,
+				device_name: 'webapp_device'
+			})
+				.then(response => {
+					localStorage.setItem('token', response.data);
+					this.showLoginPopup = false;
+					this.fetchUserData();
+				})
+				.catch(error => {
+					alert('Login failed, please try again');
+					console.error(error)
+				});
+		},
+		logout() {
+			axios.post('http://localhost:80/api/user/logout', {}, {
+				'headers': {
+					Authorization: `Bearer ${localStorage.getItem('token')}`,
+				}
+			})
+				.then(() => {
+					localStorage.removeItem("token");
+					this.user = null;
+
+					this.fetchJobs(true);
+					window.addEventListener('scroll', this.handleScroll);
+				})
+				.catch(error => {
+					alert('Logout failed, please try again');
+					console.error(error)
+				});
+		},
+		fetchUserData() {
+			axios.get('http://localhost:80/api/user', {
+				'headers': {
+					Authorization: `Bearer ${localStorage.getItem('token')}`,
+				}
+			})
+				.then(response => {
+					this.user = response.data.user;
+
+					this.fetchJobs(true);
+					window.addEventListener('scroll', this.handleScroll);
+				})
+				.catch(error => {
+					alert('Fetch user profile failed, please try again');
+					console.error(error);
+				});
+		}
+	}
 }
 </script>
