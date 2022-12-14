@@ -140,8 +140,9 @@
 					Authorization: `Bearer ${localStorage.getItem('token')}`,
 				}
 			})
-            .then(() => {
+            .then((response) => {
                 this.showModal = false;
+				this.$emit('addedJobOffer', response.data)
             })
             .catch(error => {
                 alert('Job offer creation failed, please try again');

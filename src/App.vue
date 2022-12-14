@@ -12,7 +12,7 @@
 
 		<!-- Login popup -->
 		<div id="loginPopup" v-if="showLoginPopup">
-			<h3>Login</h3>
+			<h2>Login</h2>
 			<form @submit.prevent>
 				<input type="text" placeholder="Username" v-model="username" />
 				<input type="password" placeholder="Password" v-model="password" />
@@ -23,15 +23,18 @@
 
 		<button v-if="!user && !showLoginPopup" @click="toggleLoginPopup">Login</button>
 
+		<SoftDeletedJobs :softDeletedJobs="softDeletedJobs" @restoredJobOffer="fetchJobs(true); fetchSoftDeletedJobs();" v-if="user && user.roles.includes('firm')" />
+	
+		<h2>Jobs affichés</h2>
+			<!-- Add Job Offer Form -->
+			<AddJobForm @addedJobOffer="addJobOffer" v-if="user && user.roles.includes('firm')" />
 		<ul>
 			<li v-for="(job, index) in jobs" :key="index">
 				<h3>{{ job.title }}</h3>
 				<p>{{ job.description }}</p>
+				<button v-if="user && user.roles.includes('firm')" @click="deleteJob(index)">Delete</button>
 			</li>
 		</ul>
-
-		<!-- Add Job Offer Form -->
-		<AddJobForm v-if="user && user.roles.includes('firm')" />
 
 	</div>
 </template>
@@ -39,14 +42,17 @@
 <script>
 import axios from 'axios';
 import AddJobForm from '@/components/AddJobForm';
+import SoftDeletedJobs from '@/components/SoftDeletedJobs';
 
 export default {
 	components: {
-		AddJobForm
+		AddJobForm,
+		SoftDeletedJobs
 	},
 	data() {
 		return {
 			jobs: [],
+			softDeletedJobs: [],
 			page: 1,
 			isLoading: false,
 			showLoginPopup: false,
@@ -58,7 +64,7 @@ export default {
 	},
 	mounted() {
 		if (localStorage.getItem('token')) {
-			this.fetchUserData();
+			this.fetchUserData();			
 		} else {
 			this.fetchJobs(true);
 		}
@@ -86,7 +92,11 @@ export default {
 				url = 'http://localhost:80/api/firm/jobs?page=' + this.page;
 			}
 
-			axios.get(url)
+			axios.get(url, {
+				'headers': {
+					Authorization: `Bearer ${localStorage.getItem('token')}`,
+				}
+			})
 				.then(response => {
 					this.jobs = [...this.jobs, ...response.data.data];
 					this.page++;
@@ -153,12 +163,46 @@ export default {
 
 					this.fetchJobs(true);
 					window.addEventListener('scroll', this.handleScroll);
+
+					if(this.user.roles.includes('firm')) {
+						this.fetchSoftDeletedJobs();
+					}
 				})
 				.catch(error => {
 					alert('Fetch user profile failed, please try again');
 					console.error(error);
 				});
-		}
+		},
+		addJobOffer(job_offer) {
+			this.jobs = [...this.jobs, job_offer];
+		},
+		deleteJob(index) {
+			axios.delete('http://localhost:80/api/jobs/' + this.jobs[index].id, {
+				headers: {
+					'Authorization': `Bearer ${localStorage.getItem('token')}`,
+				}
+			}).then(() => {
+				this.jobs.splice(index, 1);
+				this.fetchSoftDeletedJobs();
+			}).catch(error => {
+				alert('Job deletion failed, please try again');
+				console.error(error);
+			});
+		},
+		fetchSoftDeletedJobs() {
+			axios.get('http://localhost:80/api/firm/soft_deleted_jobs', {
+					'headers': {
+						Authorization: `Bearer ${localStorage.getItem('token')}`,
+					}
+				})
+			.then(response => {
+				this.fetchJobs();
+				this.softDeletedJobs = response.data.data
+			})
+			.catch(error => {
+				console.log(error)
+			})
+      },
 	}
 }
 </script>
