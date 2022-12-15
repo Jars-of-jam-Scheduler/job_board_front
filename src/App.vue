@@ -174,7 +174,7 @@ export default {
 				});
 		},
 		addJobOffer(job_offer) {
-			this.jobs = [...this.jobs, job_offer];
+			this.jobs = [job_offer, ...this.jobs];
 		},
 		deleteJob(index) {
 			axios.delete('http://localhost:80/api/jobs/' + this.jobs[index].id, {
